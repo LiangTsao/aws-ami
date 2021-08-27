@@ -9,7 +9,7 @@ locals {
   docker_compose_version = "1.29.2"
   ecr_helper_version     = "0.5.0"
   consul_version         = "1.10.1"
-  nomad_version          = "1.1.3"
+  nomad_version          = "1.1.4"
 
   # Canonical's official China/Global AWS account IDs
   source_ami_owners = [substr(var.region, 0, 3) == "cn-" ? "837727238323" : "099720109477"]
