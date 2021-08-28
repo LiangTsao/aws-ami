@@ -15,6 +15,8 @@ readonly NOMAD_USER="nomad"
 readonly NOMAD_INSTALL_PATH="/opt/nomad"
 readonly NOMAD_CONFIG_FILE="default.hcl"
 
+readonly CONSUL_KV_NOMAD_REPLICATION_TOKEN="nomad/config/acl/replication_token"
+
 readonly DOCKER_AUTH_CONFIG_FILE="/etc/docker-auth.json"
 
 readonly EC2_INSTANCE_METADATA_URL="http://169.254.169.254/latest/meta-data"
@@ -33,13 +35,14 @@ function print_usage {
   echo
   echo "Options:"
   echo
-  echo -e "  --server\t\tIf set, run in server mode. Optional. At least one of --server or --client must be set."
-  echo -e "  --client\t\tIf set, run in client mode. Optional. At least one of --server or --client must be set."
-  echo -e "  --num-servers\t\tThe number of servers to expect in the Nomad cluster. Required if --server is true."
-  echo -e "  --scheduler-algorithm\tThe default algorithm to schedule jobs. Optional if --server is true. Can be \"binpack\" or \"spread\". Defaults to \"binpack\"."
-  echo -e "  --node-class\t\tThe node_class of nomad client. Optional if --client is true."
-  echo -e "  --meta\t\tThe meta of nomad client. Optional if --client is true. Provide key=value,key=value... format string."
-  echo -e "  --host-volumes\tHost volumes to be made available to jobs. Optional if --client is true. Format is name:path:owner:group:read_only,..."
+  echo -e "  --server\t\t\tIf set, run in server mode. Optional. At least one of --server or --client must be set."
+  echo -e "  --client\t\t\tIf set, run in client mode. Optional. At least one of --server or --client must be set."
+  echo -e "  --num-servers\t\t\tThe number of servers to expect in the Nomad cluster. Required if --server is true."
+  echo -e "  --scheduler-algorithm\t\tThe default algorithm to schedule jobs. Optional if --server is true. Can be \"binpack\" or \"spread\". Defaults to \"binpack\"."
+  echo -e "  --authoritative-region\tSpecifies the authoritative region. Optional if --server is true. By default, the local region is assumed to be authoritative."
+  echo -e "  --node-class\t\t\tThe node_class of nomad client. Optional if --client is true."
+  echo -e "  --meta\t\t\tThe meta of nomad client. Optional if --client is true. Provide key=value,key=value... format string."
+  echo -e "  --host-volumes\t\tHost volumes to be made available to jobs. Optional if --client is true. Format is name:path:owner:group:read_only,..."
   echo
   echo "Example:"
   echo
@@ -146,6 +149,27 @@ function prepare_nomad_data_dir {
   fi
 }
 
+# About authoritative_region and replication_token:
+# Each server in authoritative region: authoritative_region=""
+# Each server in non-authoritative region needs replication_token to mirror the policies and tokens into the local region from authoritative_region
+# This script assumes that:
+#   1. AWS regions are mapped as Nomad regions, as well as Consul datacenters
+#   2. replication_token has already been written in specified key of Consul KV store, at authoritative region
+# Read the following links for more details:
+#   https://learn.hashicorp.com/tutorials/nomad/access-control#multi-region-configuration
+#   https://learn.hashicorp.com/tutorials/nomad/access-control-bootstrap#configure-for-multiple-regions
+#   https://www.nomadproject.io/docs/configuration/server#authoritative_region
+#   https://www.nomadproject.io/docs/configuration/acl#replication_token
+function get_replication_token_from_consul {
+  local readonly authoritative_region="$1"
+  local readonly consul_kv_key="$2"
+  local replication_token=""
+  if [[ -n "$authoritative_region" ]]; then
+    replication_token=$(consul kv get -datacenter="$authoritative_region" "$consul_kv_key")
+  fi
+  echo "$replication_token"
+}
+
 function generate_docker_auth_config {
   local readonly region="$1"
   local readonly config_path="$2"
@@ -164,16 +188,17 @@ EOF
 }
 
 function generate_nomad_config {
-  local readonly server="$1"
-  local readonly client="$2"
-  local readonly num_servers="$3"
-  local readonly scheduler_algorithm="$4"
-  local readonly node_class="$5"
-  local readonly config_dir="$6"
-  local readonly data_dir="$7"
-  local readonly user="$8"
-  local readonly meta="$9"
-  local readonly host_volumes="${10}"
+  local readonly server="${1}"
+  local readonly client="${2}"
+  local readonly num_servers="${3}"
+  local readonly scheduler_algorithm="${4}"
+  local readonly authoritative_region="${5}"
+  local readonly node_class="${6}"
+  local readonly config_dir="${7}"
+  local readonly data_dir="${8}"
+  local readonly user="${9}"
+  local readonly meta="${10}"
+  local readonly host_volumes="${11}"
   local readonly config_path="$config_dir/$NOMAD_CONFIG_FILE"
 
   local instance_id=""
@@ -188,6 +213,7 @@ function generate_nomad_config {
 
   local server_config=""
   if [[ "$server" == "true" ]]; then
+    local readonly replication_token=$(get_replication_token_from_consul "$authoritative_region" "$CONSUL_KV_NOMAD_REPLICATION_TOKEN")
     # Increase http_max_conns_per_client to 1000 (defaults to 100)
     # https://www.nomadproject.io/docs/configuration#http_max_conns_per_client
     # This workarounds error from Nginx when many Nomad Web UI is open
@@ -202,6 +228,7 @@ server {
   enabled = true
   raft_protocol = 3
   bootstrap_expect = $num_servers
+  authoritative_region = "$authoritative_region"
   default_scheduler_config {
     scheduler_algorithm = "$scheduler_algorithm"
     preemption_config {
@@ -210,6 +237,11 @@ server {
       service_scheduler_enabled = false
     }
   }
+}
+
+acl {
+  enabled = true
+  replication_token = "$replication_token"
 }
 EOF
 )
@@ -243,6 +275,10 @@ client {
   }
 $meta_block
 $host_volumes_stanzas
+}
+
+acl {
+  enabled = true
 }
 
 plugin "raw_exec" {
@@ -297,10 +333,6 @@ advertise {
 
 consul {
   address = "127.0.0.1:8500"
-}
-
-acl {
-  enabled = true
 }
 
 telemetry {
@@ -365,6 +397,7 @@ function run {
   local client="false"
   local num_servers=""
   local scheduler_algorithm="binpack"
+  local authoritative_region=""
   local node_class=""
   local user=""
   local meta=""
@@ -389,6 +422,10 @@ function run {
         ;;
       --scheduler-algorithm)
         scheduler_algorithm="$2"
+        shift
+        ;;
+      --authoritative-region)
+        authoritative_region="$2"
         shift
         ;;
       --node-class)
@@ -440,7 +477,7 @@ function run {
 
   local readonly data_dir=$(prepare_nomad_data_dir "$user")
 
-  generate_nomad_config "$server" "$client" "$num_servers" "$scheduler_algorithm" "$node_class" "$config_dir" "$data_dir" "$user" "$meta" "$host_volumes"
+  generate_nomad_config "$server" "$client" "$num_servers" "$scheduler_algorithm" "$authoritative_region" "$node_class" "$config_dir" "$data_dir" "$user" "$meta" "$host_volumes"
   generate_systemd_config "$user" "$bin_dir" "$config_dir"
 
   start_nomad
