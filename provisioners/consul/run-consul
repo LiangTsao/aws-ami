@@ -39,9 +39,10 @@ function print_usage {
   echo
   echo -e "  --server\t\tIf set, run in server mode. Optional. Exactly one of --server or --client must be set."
   echo -e "  --client\t\tIf set, run in client mode. Optional. Exactly one of --server or --client must be set."
-  echo -e "  --cluster-tag-key\tAutomatically form a cluster with Instances that have this tag key and the tag value in --cluster-tag-value. Optional."
-  echo -e "  --cluster-tag-value\tAutomatically form a cluster with Instances that have the tag key in --cluster-tag-key and this tag value. Optional."
+  echo -e "  --cluster-tag-key\tAutomatically form a cluster with instances that have this tag key and the tag value in --cluster-tag-value. Optional."
+  echo -e "  --cluster-tag-value\tAutomatically form a cluster with instances that have the tag key in --cluster-tag-key and this tag value. Optional."
   echo -e "  --datacenter\t\tThe name of the datacenter Consul is running in. Optional. If not specified, will default to AWS region name."
+  echo -e "  --wan-region\t\tThe AWS region to join the WAN gossip pool of the multi-datacenter federation with. Optional.\n\t\t\tIf specified, consul in server mode will join WAN nodes in this region which have tags specified with --cluster-tag-key and --cluster-tag-value."
   echo
   echo
   echo "Example:"
@@ -213,6 +214,7 @@ function generate_consul_config {
   local readonly cluster_tag_key="${5}"
   local readonly cluster_tag_value="${6}"
   local readonly datacenter="${7}"
+  local readonly wan_region="${8}"
 
   local readonly config_path="$config_dir/$CONSUL_CONFIG_FILE"
 
@@ -226,14 +228,21 @@ function generate_consul_config {
   instance_ip_address=$(get_instance_ip_address)
   instance_region=$(get_instance_region)
 
-  local retry_join_json=""
+  local retry_join=""
+  local retry_join_wan=""
   if [[ -z "$cluster_tag_key" || -z "$cluster_tag_value" ]]; then
     log_warn "Either the cluster tag key ($cluster_tag_key) or value ($cluster_tag_value) is empty. Will not automatically try to form a cluster based on EC2 tags."
   else
-    retry_join_json=$(cat <<EOF
+    retry_join=$(cat <<EOF
 "retry_join": ["provider=aws region=$instance_region tag_key=$cluster_tag_key tag_value=$cluster_tag_value"],
 EOF
 )
+    if [[ "$server" == "true" && -n "$wan_region" ]]; then
+      retry_join_wan=$(cat <<EOF
+"retry_join_wan": ["provider=aws region=$wan_region tag_key=$cluster_tag_key tag_value=$cluster_tag_value"],
+EOF
+)
+    fi
   fi
 
   local bootstrap_expect=""
@@ -275,7 +284,8 @@ EOF
   "datacenter": "$datacenter",
   "node_name": "$instance_id",
   $bootstrap_expect
-  $retry_join_json
+  $retry_join
+  $retry_join_wan
   $telemetry
   "ui": $ui
 }
@@ -316,6 +326,7 @@ function run {
   local cluster_tag_key=""
   local cluster_tag_value=""
   local datacenter=""
+  local wan_region=""
 
   while [[ $# > 0 ]]; do
     local key="$1"
@@ -340,6 +351,11 @@ function run {
       --datacenter)
         assert_not_empty "$key" "$2"
         datacenter="$2"
+        shift
+        ;;
+      --wan-region)
+        assert_not_empty "$key" "$2"
+        wan_region="$2"
         shift
         ;;
       --help)
@@ -376,7 +392,8 @@ function run {
     "$user" \
     "$cluster_tag_key" \
     "$cluster_tag_value" \
-    "$datacenter"
+    "$datacenter" \
+    "$wan_region"
 
   start_consul
 
