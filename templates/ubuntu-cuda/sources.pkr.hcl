@@ -50,7 +50,6 @@ source "amazon-ebs" "focal_cuda_amd64" {
     os_version             = "20.04"
     source_ami             = "{{ .SourceAMI }}"
     source_ami_name        = "{{ .SourceAMIName }}"
-    timezone               = var.timezone
     git_commit             = var.git_commit
     Extra = "{{ .SourceAMITags.TagName }}"
   }
