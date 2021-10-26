@@ -8,12 +8,18 @@ Create an **AWS IAM Role** with name `packer-ec2` and attach managed policy **Am
 
 Configure the **EC2 Instance Profile** if you are running packer on EC2. Otherwise configure `~/.aws/credentials` on your machine.
 
-## Run
-
+## Build Ubuntu AMI
 ```shell
 packer build \
-    -var 'region=[region]' \
-    -var 'subnet_id=[subnet_id]' \
-    templates/[name]
+    -var 'region=cn-northwest-1' \
+    -var 'subnet_id=subnet_12345' \
+    templates/ubuntu
 ```
-For ubuntu-cuda AMI,pass in <u>-var 'source_ami_owners=[d]'</u>
+## Build Ubuntu-CUDA AMI
+```shell
+packer build \
+    -var 'region=cn-northwest-1' \
+    -var 'subnet_id=subnet_12345' \
+    -var 'source_ami_owners=[123456789]' \
+    templates/ubuntu-cuda/
+```

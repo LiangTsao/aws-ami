@@ -24,33 +24,15 @@ source "amazon-ebs" "focal_cuda_amd64" {
   ssh_clear_authorized_keys   = true
   associate_public_ip_address = true
 
-/*
-  dynamic "tag" {
-    for_each = ${merge(
-        "{{ .SourceAMITags }}",
-        map(
-            Name                   = local.ami_names.focal_cuda_amd64,
-            build_region           = "{{ .BuildRegion }}",
-            source_ami             = "{{ .SourceAMI }}",
-            source_ami_name        = "{{ .SourceAMIName }}",
-            git_commit             = var.git_commit,
-            cuda_driver_version    = local.cuda_driver_version
-        )
-    )}
-    content {
-        name                = tag.key
-        value               = tag.value
-    }
-  }
-  */
   tags = {
     Name                   = local.ami_names.focal_cuda_amd64
     build_region           = "{{ .BuildRegion }}"
-    os_name                = "Ubuntu"
-    os_version             = "20.04"
+    os_arch                = "{{ .SourceAMITags.os_arch }}"
+    os_name                = "{{ .SourceAMITags.os_name }}"
+    os_version             = "{{ .SourceAMITags.os_version }}"
     source_ami             = "{{ .SourceAMI }}"
     source_ami_name        = "{{ .SourceAMIName }}"
     git_commit             = var.git_commit
-    Extra = "{{ .SourceAMITags.TagName }}"
+    cuda_driver_version    = local.cuda_driver_version
   }
 }
