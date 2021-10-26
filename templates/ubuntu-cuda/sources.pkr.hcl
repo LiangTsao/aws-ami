@@ -24,7 +24,7 @@ source "amazon-ebs" "focal_cuda_amd64" {
   ssh_clear_authorized_keys   = true
   associate_public_ip_address = true
 
-
+/*
   dynamic "tag" {
     for_each = ${merge(
         "{{ .SourceAMITags }}",
@@ -41,5 +41,17 @@ source "amazon-ebs" "focal_cuda_amd64" {
         name                = tag.key
         value               = tag.value
     }
+  }
+  */
+  tags = {
+    Name                   = local.ami_names.focal_cuda_amd64
+    build_region           = "{{ .BuildRegion }}"
+    os_name                = "Ubuntu"
+    os_version             = "20.04"
+    source_ami             = "{{ .SourceAMI }}"
+    source_ami_name        = "{{ .SourceAMIName }}"
+    timezone               = var.timezone
+    git_commit             = var.git_commit
+    Extra = "{{ .SourceAMITags.TagName }}"
   }
 }
