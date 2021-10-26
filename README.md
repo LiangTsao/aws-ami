@@ -16,3 +16,4 @@ packer build \
     -var 'subnet_id=[subnet_id]' \
     templates/[name]
 ```
+For ubuntu-cuda AMI,pass in <u>-var 'source_ami_owners=[d]'</u>
