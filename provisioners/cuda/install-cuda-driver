@@ -1,15 +1,8 @@
-#!/bin/sh
+#!/bin/bash
 
-# apt-show-versions cuda-drivers
-# aptitude versions cuda-drivers
-# apt-get install cuda-drivers=<<version>>
+set -e
 
-#sudo sed -i 's/http:\/\/apt.ksyun.cn/http:\/\/mirrors.aliyun.com/g' /etc/apt/sources.list
-#sudo sed -i 's/http:\/\/cn-northwest-1.ec2.archive.ubuntu.com/http:\/\/mirrors.aliyun.com/g' /etc/apt/sources.list
-#sudo sed -i 's/http:\/\/archive.ubuntu.com/http:\/\/mirrors.aliyun.com/g' /etc/apt/sources.list
-#sudo sed -i 's/http:\/\/security.ubuntu.com/http:\/\/mirrors.aliyun.com/g' /etc/apt/sources.list
 sudo apt-get update
-
 sudo DEBIAN_FRONTEND=noninteractive apt-get install -y build-essential
 sudo DEBIAN_FRONTEND=noninteractive apt-get install -y linux-headers-$(uname -r)
 
@@ -21,15 +14,10 @@ sudo mv cuda-$CUDA_DISTRO.pin /etc/apt/preferences.d/cuda-repository-pin-600
 sudo apt-key adv --fetch-keys https://developer.download.nvidia.com/compute/cuda/repos/$CUDA_DISTRO/$ARCH/7fa2af80.pub
 echo "deb https://developer.download.nvidia.com/compute/cuda/repos/$CUDA_DISTRO/$ARCH /" | sudo tee /etc/apt/sources.list.d/cuda.list
 sudo apt-get update
-
 sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
 	 cuda-drivers=$CUDA_DRIVERS_VERSION
 
-#sudo DEBIAN_FRONTEND=noninteractive apt-get install -y docker.io
-#sudo systemctl enable --now docker
-#sudo usermod -aG docker ubuntu
-
-sudo DEBIAN_FRONTEND=noninteractive apt install -y curl
+sudo DEBIAN_FRONTEND=noninteractive apt-get install -y curl
 NVDOCKER_DISTRO=$(. /etc/os-release;echo $ID$VERSION_ID)
 curl -s -L https://nvidia.github.io/nvidia-docker/gpgkey | sudo apt-key add -
 curl -s -L https://nvidia.github.io/nvidia-docker/$NVDOCKER_DISTRO/nvidia-docker.list \

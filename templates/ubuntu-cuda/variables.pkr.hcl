@@ -13,6 +13,11 @@ variable "subnet_id" {
   type        = string
 }
 
+variable "source_ami_owners" {
+  description = "The base AMI owner account ID."
+  type        = list(string)
+}
+
 # ---------------------------------------------------------------------------------------------------------------------
 # OPTIONAL PARAMETERS
 # These parameters have reasonable defaults.
@@ -24,7 +29,7 @@ variable "iam_instance_profile" {
   default     = "packer-ec2"
 }
 
-variable "instance_type_cuda_amd64" {
+variable "instance_type_amd64" {
   description = "The EC2 instance type to use while building the AMI for CUDA AMD64 architecture."
   type        = string
   default     = "g4dn.xlarge"
@@ -40,12 +45,6 @@ variable "users_to_share" {
   description = "A list of AWS account IDs to share AMI with."
   type        = list(string)
   default     = []
-}
-
-variable "timezone" {
-  description = "The system time zone the AMI is configured with."
-  type        = string
-  default     = "Asia/Shanghai"
 }
 
 variable "git_commit" {
